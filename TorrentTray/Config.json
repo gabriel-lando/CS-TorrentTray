@@ -1,0 +1,8 @@
+{
+  "mongoServer": "localhost:27017",
+  "database": "TorrentDownload",
+  "collection": "magnet",
+  "username": "gabriellando",
+  "password": "passwd_here",
+  "refreshTime": "60"
+}
