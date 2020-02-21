@@ -1,8 +1,6 @@
 {
-  "mongoServer": "localhost:27017",
+  "connectionString": "mongodb+srv://gabriellando:%40%40Lando123@keepalivedb-lcmah.gcp.mongodb.net/test?authSource=admin&replicaSet=KeepAliveDB-shard-0&readPreference=primary&appname=MongoDB%20Compass&ssl=true",
   "database": "TorrentDownload",
   "collection": "magnet",
-  "username": "gabriellando",
-  "password": "passwd_here",
   "refreshTime": "60"
 }

@@ -10,29 +10,27 @@ namespace TorrentTray
 {
     class ParseConfig
     {
-        private string connectionString = null;
-        private string collection = null;
-        private int refreshTime = 0;
-        private Config configsParsed;
+        private static Config configsParsed;
 
         public ParseConfig()
         {
             LoadJson();
-            connectionString = $"mongodb://{configsParsed.username}:{configsParsed.password}@{configsParsed.mongoServer}/{configsParsed.database}";
-            collection = configsParsed.collection;
-            refreshTime = configsParsed.refreshTime;
         }
-        public string getConnectionString()
+        public string GetConnectionString()
         {
-            return connectionString;
+            return configsParsed.connectionString;
         }
-        public string getCollection()
+        public string GetDatabase()
         {
-            return collection;
+            return configsParsed.database;
         }
-        public int getRefreshTime()
+        public string GetCollection()
         {
-            return refreshTime;
+            return configsParsed.collection;
+        }
+        public int GetRefreshTime()
+        {
+            return configsParsed.refreshTime;
         }
 
         private void LoadJson()
@@ -47,11 +45,9 @@ namespace TorrentTray
 
     class Config
     {
-        public string mongoServer;
+        public string connectionString;
         public string database;
         public string collection;
-        public string username;
-        public string password;
         public int refreshTime;
     }
 }
