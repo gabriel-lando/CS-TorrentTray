@@ -1,6 +1,13 @@
 {
   "connectionString": "mongodb+srv://gabriellando:%40%40Lando123@keepalivedb-lcmah.gcp.mongodb.net/test?authSource=admin&replicaSet=KeepAliveDB-shard-0&readPreference=primary&appname=MongoDB%20Compass&ssl=true",
   "database": "TorrentDownload",
-  "collection": "magnet",
-  "refreshTime": "60"
+  "collection": "hash",
+  "poolingTime": 60,
+  "bittorrent_path": "C:\\Program Files\\qBittorrent\\",
+  "bittorrent_exec": "qbittorrent.exe",
+  "bittorrent_args": null,
+  "bittorrent_addr": "http://localhost:8888",
+  "bittorrent_add_uri": "/api/v2/torrents/add",
+  "bittorrent_check_uri": "/api/v2/torrents/files?hash=",
+  "verifyTorrentTime": 15
 }
