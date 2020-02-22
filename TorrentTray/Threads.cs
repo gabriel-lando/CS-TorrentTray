@@ -18,7 +18,7 @@ namespace TorrentTray
 
         private static bool IS_BITTORRENT_RUNNING = false;
 
-        private static readonly int ONE_HOUR_IN_MS = 1000; //60000
+        private static readonly int ONE_HOUR_IN_MS = 60000;
 
         public void DBWorker()
         {

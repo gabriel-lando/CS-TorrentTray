@@ -2,7 +2,7 @@
   "connectionString": "MONGODB_URI",
   "database": "TorrentDownload",
   "collection": "hash",
-  "poolingTime": 60,
+  "poolingTime": 30,
   "bittorrent_path": "C:\\Program Files\\qBittorrent\\",
   "bittorrent_exec": "qbittorrent.exe",
   "bittorrent_addr": "http://localhost:8888",
