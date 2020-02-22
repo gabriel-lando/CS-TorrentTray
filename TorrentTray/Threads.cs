@@ -25,6 +25,8 @@ namespace TorrentTray
             ParseConfig config = new ParseConfig();
             DBDriver driver = new DBDriver();
 
+            int poolingTime = config.GetPoolingTime();
+
             List<string> hashesDownloading = driver.ReadDownloadingHashsFromDB();
 
             if (hashesDownloading.Count > 0)
@@ -39,6 +41,22 @@ namespace TorrentTray
                         logger.Debug($"Downloading: {hash}. Tracking.");
                         Threads torrentThread = new Threads();
                         Thread thread = new Thread(() => torrentThread.VerifyTorrentWorker(hash));
+                        thread.Start();
+                    }
+                });
+            }
+
+            List<string> hashesFinished = driver.ReadFinishedHashsFromDB();
+
+            if (hashesFinished.Count > 0)
+            {
+                hashesFinished.ForEach(delegate (String hash)
+                {
+                    if (hash != null)
+                    {
+                        logger.Debug($"Finished: {hash}. Checking.");
+                        Threads torrentThread = new Threads();
+                        Thread thread = new Thread(() => torrentThread.VerifyFinishedTorrentWorker(hash));
                         thread.Start();
                     }
                 });
@@ -65,7 +83,7 @@ namespace TorrentTray
                     });
                 }
 
-                Thread.Sleep(config.GetPoolingTime() * ONE_HOUR_IN_MS);
+                Thread.Sleep(poolingTime * ONE_HOUR_IN_MS);
             }
         }
 
@@ -82,10 +100,37 @@ namespace TorrentTray
         private void VerifyTorrentWorker(string hash)
         {
             ParseConfig config = new ParseConfig();
+            int verifyTime = config.GetVerifyTorrentTime();
 
+            int result;
             do {
-                Thread.Sleep(config.GetVerifyTorrentTime() * ONE_HOUR_IN_MS);
-            } while (SystemTray.isRunning && VerifyTorrentStatus(hash));
+                Thread.Sleep(verifyTime * ONE_HOUR_IN_MS);
+                result = VerifyTorrentStatus(hash);
+
+            } while (SystemTray.isRunning && result == DBDriver.DOWNLOADING_STATUS);
+
+            if (SystemTray.isRunning && result == DBDriver.FINISHED_STATUS)
+            {
+                logger.Debug($"Finished: {hash}. Checking.");
+                Threads torrentThread = new Threads();
+                Thread thread = new Thread(() => torrentThread.VerifyFinishedTorrentWorker(hash));
+                thread.Start();
+            }
+        }
+
+        private void VerifyFinishedTorrentWorker(string hash)
+        {
+            ParseConfig config = new ParseConfig();
+            int verifyTime = 3 * config.GetVerifyTorrentTime();
+
+            int result = 0;
+            do {
+                Thread.Sleep(verifyTime * ONE_HOUR_IN_MS);
+
+                if (IS_BITTORRENT_RUNNING)
+                    result = VerifyTorrentStatus(hash);
+
+            } while (SystemTray.isRunning && result == DBDriver.FINISHED_STATUS);
         }
 
         private bool AddHashAndStartDownload(string hash)
@@ -135,7 +180,7 @@ namespace TorrentTray
             }
         }
 
-        private bool VerifyTorrentStatus(string hash) //Return True if is downloading; False if error or finished
+        private int VerifyTorrentStatus(string hash) //Return 1 if it is downloading, 2 if it is finished or 0 if error
         {
             try
             {
@@ -147,24 +192,24 @@ namespace TorrentTray
 
                 dynamic responseParsed = JsonConvert.DeserializeObject(responseString);
 
-                bool downloading = false;
+                int status = DBDriver.FINISHED_STATUS;
                 foreach (var item in responseParsed)
                 {
                     if (item.is_seed == false)
                     {
                         logger.Debug($"Hash {hash} is still downloading.");
-                        downloading = true;
+                        status = DBDriver.DOWNLOADING_STATUS;
                     }
                 }
 
-                if (downloading == false)
+                if (status == DBDriver.FINISHED_STATUS)
                 {
                     logger.Info($"Hash {hash} finished :)");
                     DBDriver driver = new DBDriver();
                     driver.UpdateStatusFromDB(hash, DBDriver.FINISHED_STATUS);
                 }
 
-                return downloading;
+                return status;
             }
             catch (WebException we)
             {
@@ -175,18 +220,18 @@ namespace TorrentTray
                     logger.Info($"Hash {hash} removed from qBittorrent. Removing from DB.");
                     DBDriver driver = new DBDriver();
                     driver.RemoveHashFromDB(hash);
-                    return false;
+                    return DBDriver.REMOVED_STATUS;
                 }
                 else
                 {
                     logger.Error($"Error verifying hash {hash}. Error acessing API: {we.ToString()}.");
-                    return false;
+                    return DBDriver.ERROR_STATUS;
                 }
             }
             catch (Exception ex)
             {
                 logger.Error($"Error verifying hash {hash}. Error acessing API: {ex.ToString()}.");
-                return false;
+                return DBDriver.ERROR_STATUS;
             }
         }
 

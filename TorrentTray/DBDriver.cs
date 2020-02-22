@@ -11,9 +11,11 @@ namespace TorrentTray
     {
         private static readonly Logger logger = LogManager.GetCurrentClassLogger();
 
+        static public readonly int ERROR_STATUS = -1;
         static public readonly int WAITING_STATUS = 0;
         static public readonly int DOWNLOADING_STATUS = 1;
         static public readonly int FINISHED_STATUS = 2;
+        static public readonly int REMOVED_STATUS = 3;
 
         private static ParseConfig config;
         private static bool IS_CONENCTED = false;
@@ -64,11 +66,26 @@ namespace TorrentTray
             {
                 IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
                 logger.Debug("Getting downloading hashes from MongoDB.");
-                return (from x in collection.AsQueryable<Magnet>() where (x.status == DOWNLOADING_STATUS || x.status == FINISHED_STATUS) select x.hash).ToList();
+                return (from x in collection.AsQueryable<Magnet>() where (x.status == DOWNLOADING_STATUS) select x.hash).ToList();
             }
             catch (Exception ex)
             {
                 logger.Error($"Error reading downloading hashes from MongoDB. ERROR: {ex.ToString()}");
+                return null;
+            }
+        }
+
+        public List<string> ReadFinishedHashsFromDB()
+        {
+            try
+            {
+                IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
+                logger.Debug("Getting finished hashes from MongoDB.");
+                return (from x in collection.AsQueryable<Magnet>() where (x.status == FINISHED_STATUS) select x.hash).ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error reading finished hashes from MongoDB. ERROR: {ex.ToString()}");
                 return null;
             }
         }
