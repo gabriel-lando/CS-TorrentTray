@@ -1,22 +1,19 @@
 ﻿using MongoDB.Driver;
+using NLog;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using TorrentClient;
 
 namespace TorrentTray
 {
     
     class DBDriver
     {
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+
         static public readonly int WAITING_STATUS = 0;
         static public readonly int DOWNLOADING_STATUS = 1;
         static public readonly int FINISHED_STATUS = 2;
-
 
         private static ParseConfig config;
         private static bool IS_CONENCTED = false;
@@ -24,7 +21,6 @@ namespace TorrentTray
         private static IMongoDatabase database;
         public DBDriver()
         {
-            config = new ParseConfig();
             ConnectToDB();
         }
 
@@ -32,33 +28,76 @@ namespace TorrentTray
         {
             if (!IS_CONENCTED)
             {
-                client = new MongoClient(config.GetConnectionString());
-                database = client.GetDatabase(config.GetDatabase());
-                IS_CONENCTED = true;
+                try
+                {
+                    config = new ParseConfig();
+                    client = new MongoClient(config.GetConnectionString());
+                    database = client.GetDatabase(config.GetDatabase());
+                    IS_CONENCTED = true;
+                    logger.Info("Connected to MongoDB.");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Error connecting to MongoDB. ERROR: {ex.ToString()}");
+                }
             }
         }
 
-        public List<string> ReadHashsFromDB()
+        public List<string> ReadNewHashsFromDB()
         {
-            //ConnectToDB();
-            IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
-            return (from x in collection.AsQueryable<Magnet>() where (x.status == WAITING_STATUS) select x.hash).ToList();
+            try
+            {
+                IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
+                logger.Debug("Getting new hashes from MongoDB.");
+                return (from x in collection.AsQueryable<Magnet>() where (x.status == WAITING_STATUS) select x.hash).ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error reading new hashes from MongoDB. ERROR: {ex.ToString()}");
+                return null;
+            }
         }
+
+        public List<string> ReadDownloadingHashsFromDB()
+        {
+            try
+            {
+                IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
+                logger.Debug("Getting downloading hashes from MongoDB.");
+                return (from x in collection.AsQueryable<Magnet>() where (x.status == DOWNLOADING_STATUS) select x.hash).ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error reading downloading hashes from MongoDB. ERROR: {ex.ToString()}");
+                return null;
+            }
+        }
+
         public bool UpdateStatusFromDB(string hash, int status)
         {
-            var filter = Builders<Magnet>.Filter.Eq("hash", hash);
-            var update = Builders<Magnet>.Update.Set("status", status);
+            try
+            {
+                var filter = Builders<Magnet>.Filter.Eq("hash", hash);
+                var update = Builders<Magnet>.Update.Set("status", status);
 
-            UpdateResult result = database.GetCollection<Magnet>(config.GetCollection()).UpdateOne(filter, update);
-      
-            return result.IsAcknowledged;
+                UpdateResult result = database.GetCollection<Magnet>(config.GetCollection()).UpdateOne(filter, update);
+
+                logger.Debug("Updating hashes status in MongoDB.");
+
+                return result.IsAcknowledged;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error updating hashes status in MongoDB. ERROR: {ex.ToString()}");
+                return false;
+            } 
         }
     }
 
     class Magnet
     {
-        public string id;
+        public int _id;
         public string hash;
-        public int status; //0 = to be downloaded; 1 = downloading
+        public int status;
     }
 }

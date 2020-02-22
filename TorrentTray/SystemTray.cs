@@ -1,13 +1,15 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Threading;
 using System.Windows.Forms;
-using TorrentTray;
 using TorrentTray.Properties;
 
-namespace TorrentClient
+namespace TorrentTray
 {
     public class SystemTray : ApplicationContext
     {
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+
         private NotifyIcon trayIcon;
 
         static public bool isRunning = true;
@@ -24,6 +26,8 @@ namespace TorrentClient
                 Visible = true
             };
 
+            logger.Debug("Starting DB thread.");
+
             Threads databaseThread = new Threads();
             Thread thread = new Thread(new ThreadStart(databaseThread.DBWorker));
             thread.Start();
@@ -35,6 +39,7 @@ namespace TorrentClient
             trayIcon.Visible = false;
             isRunning = false;
 
+            logger.Info("Shutting down TorrentTray.");
             Application.Exit();
         }
     }

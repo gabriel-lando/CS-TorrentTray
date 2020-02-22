@@ -1,78 +1,107 @@
 ﻿using Newtonsoft.Json;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Web;
-using System.Windows.Forms;
-using TorrentClient;
 
 namespace TorrentTray
 {
     class Threads
     {
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+
         private static bool IS_BITTORRENT_RUNNING = false;
+
+        private static readonly int ONE_HOUR_IN_MS = 1000; //60000
+
         public void DBWorker()
         {
             ParseConfig config = new ParseConfig();
             DBDriver driver = new DBDriver();
-            
+
+            List<string> hashesDownloading = driver.ReadDownloadingHashsFromDB();
+
+            if (hashesDownloading.Count > 0)
+            {
+                if (!IS_BITTORRENT_RUNNING)
+                    StartTorrentApp(config.GetBittorrentPath(), config.GetBittorrentExec());
+
+                hashesDownloading.ForEach(delegate (String hash)
+                {
+                    if (hash != null)
+                    {
+                        logger.Debug($"Downloading: {hash}. Tracking.");
+                        Threads torrentThread = new Threads();
+                        Thread thread = new Thread(() => torrentThread.VerifyTorrentWorker(hash));
+                        thread.Start();
+                    }
+                });
+            }
+
             while (SystemTray.isRunning)
             {
-                List<string> hashsDB = driver.ReadHashsFromDB();
+                List<string> hashesWaiting = driver.ReadNewHashsFromDB();
 
-                if(hashsDB.Count > 0)
+                if(hashesWaiting.Count > 0)
                 {
                     if (!IS_BITTORRENT_RUNNING)
-                        StartTorrentApp(config.GetBittorrentPath(), config.GetBittorrentExec(), config.GetBittorrentArgs());
+                        StartTorrentApp(config.GetBittorrentPath(), config.GetBittorrentExec());
 
-                    hashsDB.ForEach(delegate (String hash)
+                    hashesWaiting.ForEach(delegate (String hash)
                     {
                         if (hash != null)
                         {
+                            logger.Debug($"New hash: {hash}. Adding.");
                             Threads torrentThread = new Threads();
-                            Thread thread = new Thread(() => torrentThread.TorrentWorker(hash));
+                            Thread thread = new Thread(() => torrentThread.AddTorrentWorker(hash));
                             thread.Start();
                         }
                     });
                 }
 
-                Thread.Sleep(config.GetPoolingTime() * 100); //60000
+                Thread.Sleep(config.GetPoolingTime() * ONE_HOUR_IN_MS);
             }
         }
 
-        private void TorrentWorker(string hash)
+        private void AddTorrentWorker(string hash)
         {
             if (!AddHashAndStartDownload(hash))
                 return;
 
+            Threads torrentThread = new Threads();
+            Thread thread = new Thread(() => torrentThread.VerifyTorrentWorker(hash));
+            thread.Start();
+        }
+
+        private void VerifyTorrentWorker(string hash)
+        {
             ParseConfig config = new ParseConfig();
 
             do {
-                Thread.Sleep(config.GetVerifyTorrentTime() * 1000); //60000
+                Thread.Sleep(config.GetVerifyTorrentTime() * ONE_HOUR_IN_MS);
             } while (SystemTray.isRunning && VerifyTorrentStatus(hash));
         }
 
         private bool AddHashAndStartDownload(string hash)
         {
-            string magnet = "magnet:?xt=urn:btih:" + hash;
-
-            ParseConfig config = new ParseConfig();
-
-            NameValueCollection outgoingQueryString = HttpUtility.ParseQueryString(String.Empty);
-            outgoingQueryString.Add("urls", magnet);
-            string postData = outgoingQueryString.ToString();
-
-            byte[] postBytes = Encoding.ASCII.GetBytes(postData);
-
             try
             {
+                string magnet = "magnet:?xt=urn:btih:" + hash;
+
+                ParseConfig config = new ParseConfig();
+
+                NameValueCollection outgoingQueryString = HttpUtility.ParseQueryString(String.Empty);
+                outgoingQueryString.Add("urls", magnet);
+                string postData = outgoingQueryString.ToString();
+
+                byte[] postBytes = Encoding.ASCII.GetBytes(postData);
+
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(config.GetBittorrentAddr() + config.GetBittorrentAddURI());
 
                 request.Method = "POST";
@@ -90,76 +119,87 @@ namespace TorrentTray
 
                 if (responseString == "Ok.")
                 {
+                    logger.Info($"Adding hash: {hash}.");
                     DBDriver driver = new DBDriver();
                     driver.UpdateStatusFromDB(hash, DBDriver.DOWNLOADING_STATUS);
                     return true;
                 }
 
-                MessageBox.Show("ERROR Adding torrent: " + responseString);
+                logger.Error($"Error adding hash {hash}. Error: {responseString}.");
                 return false;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("ERROR Acessing API: " + ex.ToString());
+                logger.Error($"Error adding hash {hash}. Error acessing API: {ex.ToString()}.");
                 return false;
             }
         }
 
         private bool VerifyTorrentStatus(string hash) //Return True if is downloading; False if error or finished
         {
-            ParseConfig config = new ParseConfig();
-
             try
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(config.GetBittorrentAddr() + config.GetBittorrentCheckURI() + hash);
+                ParseConfig config = new ParseConfig();
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(config.GetBittorrentAddr() + config.GetBittorrentCheckURI() + hash.ToLower());
                 HttpWebResponse response = (HttpWebResponse)request.GetResponse();
 
                 string responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
 
                 dynamic responseParsed = JsonConvert.DeserializeObject(responseString);
 
-                MessageBox.Show("Verify API: " + responseString);
-
-                if (responseParsed[0].status)
+                bool downloading = false;
+                foreach (var item in responseParsed)
                 {
+                    if (item.is_seed == false)
+                    {
+                        logger.Debug($"Hash {hash} is still downloading.");
+                        downloading = true;
+                    }
+                }
+
+                if (downloading == false)
+                {
+                    logger.Info($"Hash {hash} finished :)");
                     DBDriver driver = new DBDriver();
                     driver.UpdateStatusFromDB(hash, DBDriver.FINISHED_STATUS);
-                    return false;
                 }
-                return true;
+
+                return downloading;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("ERROR Acessing Check API: " + ex.ToString());
+                logger.Error($"Error verifying hash {hash}. Error acessing API: {ex.ToString()}.");
+                return false;
             }
-            return false;
         }
 
-        private bool StartTorrentApp(string path, string executable, string arguments)
+        private bool StartTorrentApp(string path, string executable)
         {
             if (IS_BITTORRENT_RUNNING)
                 return true;
 
-            Process[] pname = Process.GetProcessesByName(executable);
+            Process[] pname = Process.GetProcessesByName(executable.Replace(".exe", ""));
             if (pname.Length > 0)
             {
+                logger.Info("BitTorrent is already running.");
                 IS_BITTORRENT_RUNNING = true;
                 return true;
             }
 
             try
             {
-                Process.Start(path + executable, arguments);
+                Process.Start(path + executable);
+                logger.Info("BitTorrent is starting.");
+                IS_BITTORRENT_RUNNING = true;
+
+                Thread.Sleep(10 * 1000); // Sleep X seconds
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
-                MessageBox.Show("Error starting " + executable);
+                logger.Error($"Error starting BitTorrent. Error: {ex.ToString()}.");
+                return false;
             }
-
-            IS_BITTORRENT_RUNNING = true;
-
-            Thread.Sleep(10 * 1000);
-            return true;
         }
     }
 }
