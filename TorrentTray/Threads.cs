@@ -166,6 +166,23 @@ namespace TorrentTray
 
                 return downloading;
             }
+            catch (WebException we)
+            {
+                int statusCode = (int)((HttpWebResponse)we.Response).StatusCode;
+
+                if (statusCode == 404)
+                {
+                    logger.Info($"Hash {hash} removed from qBittorrent. Removing from DB.");
+                    DBDriver driver = new DBDriver();
+                    driver.RemoveHashFromDB(hash);
+                    return false;
+                }
+                else
+                {
+                    logger.Error($"Error verifying hash {hash}. Error acessing API: {we.ToString()}.");
+                    return false;
+                }
+            }
             catch (Exception ex)
             {
                 logger.Error($"Error verifying hash {hash}. Error acessing API: {ex.ToString()}.");

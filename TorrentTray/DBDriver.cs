@@ -92,6 +92,25 @@ namespace TorrentTray
                 return false;
             } 
         }
+
+        public bool RemoveHashFromDB(string hash)
+        {
+            try
+            {
+                var deleteFilter = Builders<Magnet>.Filter.Eq("hash", hash);
+
+                DeleteResult result = database.GetCollection<Magnet>(config.GetCollection()).DeleteOne(deleteFilter);
+
+                logger.Debug($"Removing hash {hash} from MongoDB.");
+
+                return result.IsAcknowledged;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error removing hash {hash} from MongoDB. ERROR: {ex.ToString()}");
+                return false;
+            }
+        }
     }
 
     class Magnet
@@ -99,5 +118,6 @@ namespace TorrentTray
         public int _id;
         public string hash;
         public int status;
+        public string title;
     }
 }
