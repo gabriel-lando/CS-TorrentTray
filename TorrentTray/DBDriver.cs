@@ -64,7 +64,7 @@ namespace TorrentTray
             {
                 IMongoCollection<Magnet> collection = database.GetCollection<Magnet>(config.GetCollection());
                 logger.Debug("Getting downloading hashes from MongoDB.");
-                return (from x in collection.AsQueryable<Magnet>() where (x.status == DOWNLOADING_STATUS) select x.hash).ToList();
+                return (from x in collection.AsQueryable<Magnet>() where (x.status == DOWNLOADING_STATUS || x.status == FINISHED_STATUS) select x.hash).ToList();
             }
             catch (Exception ex)
             {
